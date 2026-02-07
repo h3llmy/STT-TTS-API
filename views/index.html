@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+  <meta charset="UTF-8" />
+  <title>Rust STT Client</title>
+</head>
+
+<body>
+  <h2>Rust Whisper STT</h2>
+  <button id="start">Start</button>
+  <button id="stop" disabled>Stop</button>
+  <pre id="output"></pre>
+
+  <script>
+    let socket;
+    let audioContext;
+    let processor;
+    let input;
+    let stream;
+
+    const output = document.getElementById("output");
+    const startBtn = document.getElementById("start");
+    const stopBtn = document.getElementById("stop");
+
+    // ---- VAD SETTINGS ----
+    const SILENCE_THRESHOLD = 0.01; // adjust if needed
+    const SILENCE_DELAY = 800; // ms after last speech before sending
+
+    let speechBuffer = [];
+    let silenceTimer = null;
+    let isSpeaking = false;
+
+    startBtn.onclick = async () => {
+      startBtn.disabled = true;
+      stopBtn.disabled = false;
+
+      socket = new WebSocket("ws://192.168.1.222:3078/stt");
+      socket.binaryType = "arraybuffer";
+
+      socket.onmessage = (event) => {
+        const data = JSON.parse(event.data);
+        output.textContent = data.text;
+      };
+
+      stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+
+      audioContext = new AudioContext({ sampleRate: 16000 });
+      input = audioContext.createMediaStreamSource(stream);
+
+      processor = audioContext.createScriptProcessor(4096, 1, 1);
+
+      processor.onaudioprocess = (event) => {
+        const floatData = event.inputBuffer.getChannelData(0);
+
+        const energy = getEnergy(floatData);
+
+        if (energy > SILENCE_THRESHOLD) {
+          // User is speaking
+          isSpeaking = true;
+
+          if (silenceTimer) {
+            clearTimeout(silenceTimer);
+            silenceTimer = null;
+          }
+
+          const pcmData = convertFloatToInt16(floatData);
+          speechBuffer.push(pcmData);
+        } else if (isSpeaking) {
+          // Silence after speech
+          if (!silenceTimer) {
+            silenceTimer = setTimeout(() => {
+              sendBufferedSpeech();
+              isSpeaking = false;
+              silenceTimer = null;
+            }, SILENCE_DELAY);
+          }
+        }
+      };
+
+      input.connect(processor);
+      processor.connect(audioContext.destination);
+    };
+
+    stopBtn.onclick = () => {
+      startBtn.disabled = false;
+      stopBtn.disabled = true;
+
+      processor.disconnect();
+      input.disconnect();
+      stream.getTracks().forEach(track => track.stop());
+
+      if (socket) socket.close();
+    };
+
+    function sendBufferedSpeech() {
+      if (speechBuffer.length === 0) return;
+
+      const merged = mergeBuffers(speechBuffer);
+      speechBuffer = [];
+
+      if (socket.readyState === WebSocket.OPEN) {
+        socket.send(merged);
+      }
+    }
+
+    function mergeBuffers(buffers) {
+      let totalLength = buffers.reduce((sum, buf) => sum + buf.byteLength, 0);
+      let merged = new Uint8Array(totalLength);
+      let offset = 0;
+
+      buffers.forEach(buf => {
+        merged.set(new Uint8Array(buf), offset);
+        offset += buf.byteLength;
+      });
+
+      return merged.buffer;
+    }
+
+    function getEnergy(buffer) {
+      let sum = 0;
+      for (let i = 0; i < buffer.length; i++) {
+        sum += Math.abs(buffer[i]);
+      }
+      return sum / buffer.length;
+    }
+
+    function convertFloatToInt16(buffer) {
+      const l = buffer.length;
+      const buf = new ArrayBuffer(l * 2);
+      const view = new DataView(buf);
+
+      for (let i = 0; i < l; i++) {
+        let s = Math.max(-1, Math.min(1, buffer[i]));
+        view.setInt16(i * 2, s < 0 ? s * 0x8000 : s * 0x7FFF, true);
+      }
+
+      return buf;
+    }
+  </script>
+</body>
+
+</html>
