@@ -35,7 +35,7 @@
       startBtn.disabled = true;
       stopBtn.disabled = false;
 
-      socket = new WebSocket("ws://192.168.1.222:3078/stt");
+      socket = new WebSocket("ws://localhost:3078/stt");
       socket.binaryType = "arraybuffer";
 
       socket.onmessage = (event) => {
