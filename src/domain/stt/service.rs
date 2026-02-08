@@ -1,13 +1,13 @@
+use std::env;
+
 use once_cell::sync::Lazy;
 use whisper_rs::{FullParams, SamplingStrategy, WhisperContext, WhisperContextParameters};
 
 pub static WHISPER: Lazy<WhisperContext> = Lazy::new(|| {
     println!("Loading Whisper model...");
-    let ctx = WhisperContext::new_with_params(
-        "models/ggml-large-v3-turbo.bin",
-        WhisperContextParameters::default(),
-    )
-    .expect("failed to load model");
+    let model_path = format!("models/{}.bin", env::var("MODEL").expect("MODEL not set"));
+    let ctx = WhisperContext::new_with_params(&model_path, WhisperContextParameters::default())
+        .expect("failed to load model");
 
     println!("Whisper model loaded.");
     ctx
