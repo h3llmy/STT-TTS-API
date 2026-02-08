@@ -1,0 +1,10 @@
+services:
+  stt-api:
+    build: .
+    ports:
+      - "${PORT:-3078}:${PORT:-3078}"
+    volumes:
+      - ./models:/app/models
+    env_file:
+      - .env
+    restart: unless-stopped
