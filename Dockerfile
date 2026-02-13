@@ -39,9 +39,11 @@ WORKDIR /app
 RUN apt-get update && apt-get install -y \
     libssl-dev \
     ca-certificates \
+    libgomp1 \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy the compiled binary from the builder stage
+# Create directory for models and tts cache
+RUN mkdir -p /app/models /root/.cache/k
 COPY --from=builder /usr/src/app/target/release/stt /app/stt
 COPY ./views /app/views
 

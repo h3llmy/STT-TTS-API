@@ -12,6 +12,13 @@
   <button id="stop" disabled>Stop</button>
   <pre id="output"></pre>
 
+  <hr>
+
+  <h2>Kokoro TTS</h2>
+  <input type="text" id="ttsInput" placeholder="Enter text to speak..." style="width: 300px;">
+  <button id="ttsBtn">Speak</button>
+  <audio id="ttsAudio" controls></audio>
+
   <script>
     let socket;
     let audioContext;
@@ -22,6 +29,27 @@
     const output = document.getElementById("output");
     const startBtn = document.getElementById("start");
     const stopBtn = document.getElementById("stop");
+    const ttsInput = document.getElementById("ttsInput");
+    const ttsBtn = document.getElementById("ttsBtn");
+    const ttsAudio = document.getElementById("ttsAudio");
+
+    ttsBtn.onclick = async () => {
+      const text = ttsInput.value;
+      if (!text) return;
+
+      ttsBtn.disabled = true;
+      try {
+        const response = await fetch(`/tts?text=${encodeURIComponent(text)}`);
+        const blob = await response.blob();
+        const url = URL.createObjectURL(blob);
+        ttsAudio.src = url;
+        ttsAudio.play();
+      } catch (e) {
+        console.error("TTS error", e);
+      } finally {
+        ttsBtn.disabled = false;
+      }
+    };
 
     // ---- VAD SETTINGS ----
     const SILENCE_THRESHOLD = 0.01; // adjust if needed
@@ -35,7 +63,7 @@
       startBtn.disabled = true;
       stopBtn.disabled = false;
 
-      socket = new WebSocket("ws://192.168.1.222:3078/stt");
+      socket = new WebSocket("ws://localhost:3078/stt");
       socket.binaryType = "arraybuffer";
 
       socket.onmessage = (event) => {
