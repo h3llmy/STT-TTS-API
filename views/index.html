@@ -3,14 +3,198 @@
 
 <head>
   <meta charset="UTF-8" />
-  <title>Rust STT Client</title>
+  <title>Real-Time STT Client</title>
+  <style>
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      max-width: 800px;
+      margin: 50px auto;
+      padding: 20px;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      min-height: 100vh;
+    }
+
+    .container {
+      background: white;
+      border-radius: 12px;
+      padding: 30px;
+      box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
+    }
+
+    h2 {
+      color: #333;
+      margin-top: 0;
+      text-align: center;
+    }
+
+    .controls {
+      display: flex;
+      gap: 10px;
+      justify-content: center;
+      margin: 20px 0;
+    }
+
+    button {
+      padding: 12px 24px;
+      font-size: 16px;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      transition: all 0.3s ease;
+      font-weight: 600;
+    }
+
+    button:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
+    #start {
+      background: #667eea;
+      color: white;
+    }
+
+    #start:hover:not(:disabled) {
+      background: #5568d3;
+      transform: translateY(-2px);
+      box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+    }
+
+    #stop {
+      background: #f56565;
+      color: white;
+    }
+
+    #stop:hover:not(:disabled) {
+      background: #e53e3e;
+      transform: translateY(-2px);
+      box-shadow: 0 4px 12px rgba(245, 101, 101, 0.4);
+    }
+
+    #finalize {
+      background: #48bb78;
+      color: white;
+    }
+
+    #finalize:hover:not(:disabled) {
+      background: #38a169;
+      transform: translateY(-2px);
+      box-shadow: 0 4px 12px rgba(72, 187, 120, 0.4);
+    }
+
+    #reset {
+      background: #ed8936;
+      color: white;
+    }
+
+    #reset:hover:not(:disabled) {
+      background: #dd6b20;
+      transform: translateY(-2px);
+      box-shadow: 0 4px 12px rgba(237, 137, 54, 0.4);
+    }
+
+    .output-section {
+      margin-top: 20px;
+    }
+
+    .output-label {
+      font-weight: 600;
+      color: #666;
+      margin-bottom: 8px;
+      font-size: 14px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .output-box {
+      background: #f7fafc;
+      border: 2px solid #e2e8f0;
+      border-radius: 8px;
+      padding: 16px;
+      min-height: 60px;
+      font-size: 16px;
+      line-height: 1.6;
+      color: #2d3748;
+      margin-bottom: 16px;
+    }
+
+    #partial-output {
+      border-color: #667eea;
+      background: #eef2ff;
+      font-style: italic;
+      color: #5a67d8;
+    }
+
+    #final-output {
+      border-color: #48bb78;
+      background: #f0fff4;
+      font-weight: 500;
+    }
+
+    .status {
+      text-align: center;
+      padding: 10px;
+      border-radius: 6px;
+      margin-top: 20px;
+      font-size: 14px;
+      font-weight: 600;
+    }
+
+    .status.listening {
+      background: #c6f6d5;
+      color: #22543d;
+    }
+
+    .status.idle {
+      background: #e2e8f0;
+      color: #4a5568;
+    }
+
+    .status.processing {
+      background: #feebc8;
+      color: #744210;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.5; }
+    }
+
+    .listening-indicator {
+      display: inline-block;
+      width: 8px;
+      height: 8px;
+      background: #48bb78;
+      border-radius: 50%;
+      margin-right: 8px;
+      animation: pulse 1.5s ease-in-out infinite;
+    }
+  </style>
 </head>
 
 <body>
-  <h2>Rust Whisper STT</h2>
-  <button id="start">Start</button>
-  <button id="stop" disabled>Stop</button>
-  <pre id="output"></pre>
+  <div class="container">
+    <h2>🎤 Real-Time Speech-to-Text</h2>
+    
+    <div class="controls">
+      <button id="start">Start Listening</button>
+      <button id="stop" disabled>Stop</button>
+      <button id="finalize" disabled>Finalize</button>
+      <button id="reset" disabled>Reset</button>
+    </div>
+
+    <div id="status" class="status idle">Idle</div>
+
+    <div class="output-section">
+      <div class="output-label">Partial Transcription (Real-time)</div>
+      <div id="partial-output" class="output-box">Partial results will appear here...</div>
+    </div>
+
+    <div class="output-section">
+      <div class="output-label">Full Transcription</div>
+      <div id="final-output" class="output-box">Complete transcription will appear here...</div>
+    </div>
+  </div>
 
   <script>
     let socket;
@@ -19,111 +203,122 @@
     let input;
     let stream;
 
-    const output = document.getElementById("output");
+    const partialOutput = document.getElementById("partial-output");
+    const finalOutput = document.getElementById("final-output");
+    const statusDiv = document.getElementById("status");
     const startBtn = document.getElementById("start");
     const stopBtn = document.getElementById("stop");
+    const finalizeBtn = document.getElementById("finalize");
+    const resetBtn = document.getElementById("reset");
 
-    // ---- VAD SETTINGS ----
-    const SILENCE_THRESHOLD = 0.01; // adjust if needed
-    const SILENCE_DELAY = 800; // ms after last speech before sending
-
-    let speechBuffer = [];
-    let silenceTimer = null;
-    let isSpeaking = false;
+    function setStatus(text, className) {
+      statusDiv.textContent = text;
+      statusDiv.className = `status ${className}`;
+    }
 
     startBtn.onclick = async () => {
       startBtn.disabled = true;
       stopBtn.disabled = false;
+      finalizeBtn.disabled = false;
+      resetBtn.disabled = false;
 
-      socket = new WebSocket("ws://192.168.1.222:3078/stt");
+      socket = new WebSocket("ws://localhost:3078/stt");
       socket.binaryType = "arraybuffer";
+
+      socket.onopen = () => {
+        setStatus("Connected - Ready to listen", "idle");
+      };
 
       socket.onmessage = (event) => {
         const data = JSON.parse(event.data);
-        output.textContent = data.text;
-      };
-
-      stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-
-      audioContext = new AudioContext({ sampleRate: 16000 });
-      input = audioContext.createMediaStreamSource(stream);
-
-      processor = audioContext.createScriptProcessor(4096, 1, 1);
-
-      processor.onaudioprocess = (event) => {
-        const floatData = event.inputBuffer.getChannelData(0);
-
-        const energy = getEnergy(floatData);
-
-        if (energy > SILENCE_THRESHOLD) {
-          // User is speaking
-          isSpeaking = true;
-
-          if (silenceTimer) {
-            clearTimeout(silenceTimer);
-            silenceTimer = null;
-          }
-
-          const pcmData = convertFloatToInt16(floatData);
-          speechBuffer.push(pcmData);
-        } else if (isSpeaking) {
-          // Silence after speech
-          if (!silenceTimer) {
-            silenceTimer = setTimeout(() => {
-              sendBufferedSpeech();
-              isSpeaking = false;
-              silenceTimer = null;
-            }, SILENCE_DELAY);
-          }
+        
+        if (data.type === "partial") {
+          partialOutput.textContent = data.text || "Listening...";
+          finalOutput.textContent = data.full_text || "No transcription yet";
+          setStatus("🎙️ Processing audio...", "processing");
+        } else if (data.type === "final") {
+          finalOutput.textContent = data.text || "No transcription";
+          partialOutput.textContent = "Session finalized";
+          setStatus("✓ Finalized", "idle");
+        } else if (data.type === "reset") {
+          partialOutput.textContent = "Partial results will appear here...";
+          finalOutput.textContent = "Complete transcription will appear here...";
+          setStatus("Reset - Ready to listen", "idle");
         }
       };
 
-      input.connect(processor);
-      processor.connect(audioContext.destination);
+      socket.onerror = (error) => {
+        console.error("WebSocket error:", error);
+        setStatus("Error - Connection failed", "idle");
+      };
+
+      socket.onclose = () => {
+        setStatus("Disconnected", "idle");
+      };
+
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({ 
+          audio: {
+            channelCount: 1,
+            sampleRate: 16000,
+            echoCancellation: true,
+            noiseSuppression: true,
+          } 
+        });
+
+        audioContext = new AudioContext({ sampleRate: 16000 });
+        input = audioContext.createMediaStreamSource(stream);
+        processor = audioContext.createScriptProcessor(4096, 1, 1);
+
+        processor.onaudioprocess = (event) => {
+          const floatData = event.inputBuffer.getChannelData(0);
+          const pcmData = convertFloatToInt16(floatData);
+
+          if (socket.readyState === WebSocket.OPEN) {
+            socket.send(pcmData);
+            setStatus("🎙️ Listening...", "listening");
+          }
+        };
+
+        input.connect(processor);
+        processor.connect(audioContext.destination);
+      } catch (err) {
+        console.error("Error accessing microphone:", err);
+        setStatus("Error - Microphone access denied", "idle");
+        startBtn.disabled = false;
+        stopBtn.disabled = true;
+        finalizeBtn.disabled = true;
+        resetBtn.disabled = true;
+      }
     };
 
     stopBtn.onclick = () => {
       startBtn.disabled = false;
       stopBtn.disabled = true;
+      finalizeBtn.disabled = true;
+      resetBtn.disabled = true;
 
-      processor.disconnect();
-      input.disconnect();
-      stream.getTracks().forEach(track => track.stop());
-
+      if (processor) processor.disconnect();
+      if (input) input.disconnect();
+      if (stream) stream.getTracks().forEach(track => track.stop());
       if (socket) socket.close();
+
+      setStatus("Stopped", "idle");
     };
 
-    function sendBufferedSpeech() {
-      if (speechBuffer.length === 0) return;
-
-      const merged = mergeBuffers(speechBuffer);
-      speechBuffer = [];
-
-      if (socket.readyState === WebSocket.OPEN) {
-        socket.send(merged);
+    finalizeBtn.onclick = () => {
+      if (socket && socket.readyState === WebSocket.OPEN) {
+        socket.send("finalize");
+        setStatus("Finalizing transcription...", "processing");
       }
-    }
+    };
 
-    function mergeBuffers(buffers) {
-      let totalLength = buffers.reduce((sum, buf) => sum + buf.byteLength, 0);
-      let merged = new Uint8Array(totalLength);
-      let offset = 0;
-
-      buffers.forEach(buf => {
-        merged.set(new Uint8Array(buf), offset);
-        offset += buf.byteLength;
-      });
-
-      return merged.buffer;
-    }
-
-    function getEnergy(buffer) {
-      let sum = 0;
-      for (let i = 0; i < buffer.length; i++) {
-        sum += Math.abs(buffer[i]);
+    resetBtn.onclick = () => {
+      if (socket && socket.readyState === WebSocket.OPEN) {
+        socket.send("reset");
+        setStatus("Resetting...", "processing");
       }
-      return sum / buffer.length;
-    }
+    };
 
     function convertFloatToInt16(buffer) {
       const l = buffer.length;
