@@ -1,23 +1,23 @@
 use crate::core::config::Config;
-use sherpa_rs::tts::{VitsTts, VitsTtsConfig};
+use sherpa_rs::tts::{KokoroTts, KokoroTtsConfig};
 use std::sync::Mutex;
 
 pub struct TtsService {
-    // VitsTts needs &mut self for create, so we wrap it in Mutex for thread safety
-    tts: Mutex<VitsTts>,
+    // KokoroTts needs &mut self for create, so we wrap it in Mutex for thread safety
+    tts: Mutex<KokoroTts>,
 }
 
 impl TtsService {
     pub fn new(config: &Config) -> Self {
-        let tts_config = VitsTtsConfig {
+        let tts_config = KokoroTtsConfig {
             model: config.tts_model.clone(),
-            lexicon: config.tts_voices.clone(), // Map voices to lexicon for VITS
+            voices: config.tts_voices.clone(),
             tokens: config.tts_tokens.clone(),
             data_dir: config.tts_data_dir.clone(),
             ..Default::default()
         };
 
-        let tts = VitsTts::new(tts_config);
+        let tts = KokoroTts::new(tts_config);
 
         Self {
             tts: Mutex::new(tts),

@@ -38,14 +38,13 @@ impl Config {
                 .unwrap(),
 
             tts_model: env::var("TTS_MODEL")
-                .unwrap_or_else(|_| "models/tts/vits-coqui-en-vctk/model.onnx".to_string()),
-            tts_voices: env::var("TTS_VOICES").unwrap_or_else(|_| {
-                "models/tts/vits-coqui-en-vctk/espeak-ng-data/voices/!v/voices.bin".to_string()
-            }),
+                .unwrap_or_else(|_| "models/tts/kokoro-en-v0_19/model.onnx".to_string()),
+            tts_voices: env::var("TTS_VOICES")
+                .unwrap_or_else(|_| "models/tts/kokoro-en-v0_19/voices.bin".to_string()),
             tts_tokens: env::var("TTS_TOKENS")
-                .unwrap_or_else(|_| "models/tts/vits-coqui-en-vctk/tokens.txt".to_string()),
+                .unwrap_or_else(|_| "models/tts/kokoro-en-v0_19/tokens.txt".to_string()),
             tts_data_dir: env::var("TTS_DATA_DIR")
-                .unwrap_or_else(|_| "models/tts/vits-coqui-en-vctk/espeak-ng-data".to_string()),
+                .unwrap_or_else(|_| "models/tts/kokoro-en-v0_19/espeak-ng-data".to_string()),
         }
     }
 }
