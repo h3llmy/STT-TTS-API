@@ -1,4 +1,4 @@
-/models/*
+/models/*/*
 /target
 .env*
 !.env.example

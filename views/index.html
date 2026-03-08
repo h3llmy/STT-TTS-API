@@ -12,6 +12,13 @@
   <button id="stop" disabled>Stop</button>
   <pre id="output"></pre>
 
+  <hr />
+  <h2>Rust Kokoro TTS</h2>
+  <textarea id="tts-input" placeholder="Enter text to speak..." rows="3" cols="50"></textarea>
+  <br />
+  <button id="speak">Speak</button>
+  <div id="tts-status"></div>
+
   <script>
     let socket;
     let audioContext;
@@ -87,6 +94,55 @@
       if (stream) stream.getTracks().forEach(track => track.stop());
 
       if (socket) socket.close();
+    };
+
+    const speakBtn = document.getElementById("speak");
+    const ttsInput = document.getElementById("tts-input");
+    const ttsStatus = document.getElementById("tts-status");
+
+    speakBtn.onclick = async () => {
+      const text = ttsInput.value.trim();
+      if (!text) return;
+
+      speakBtn.disabled = true;
+      ttsStatus.textContent = "Generating...";
+
+      try {
+        const response = await fetch(`/tts/generate?text=${encodeURIComponent(text)}`);
+        if (!response.ok) throw new Error(await response.text());
+
+        const sampleRate = parseInt(response.headers.get("x-sample-rate") || "24000");
+        const arrayBuffer = await response.arrayBuffer();
+        
+        // Use global audioContext if it exists, or create a new one
+        if (!audioContext) {
+            audioContext = new AudioContext();
+        }
+
+        const pcmData = new Int16Array(arrayBuffer);
+        const floatData = new Float32Array(pcmData.length);
+        for (let i = 0; i < pcmData.length; i++) {
+          floatData[i] = pcmData[i] / 32768.0;
+        }
+
+        const buffer = audioContext.createBuffer(1, floatData.length, sampleRate);
+        buffer.copyToChannel(floatData, 0);
+
+        const source = audioContext.createBufferSource();
+        source.buffer = buffer;
+        source.connect(audioContext.destination);
+        source.start();
+        
+        ttsStatus.textContent = "Playing...";
+        source.onended = () => {
+          ttsStatus.textContent = "";
+          speakBtn.disabled = false;
+        };
+      } catch (err) {
+        console.error(err);
+        ttsStatus.textContent = "Error: " + err.message;
+        speakBtn.disabled = false;
+      }
     };
 
     function convertFloatToInt16(buffer) {

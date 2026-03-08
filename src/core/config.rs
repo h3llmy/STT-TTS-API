@@ -10,6 +10,10 @@ pub struct Config {
     pub use_gpu: bool,
 
     pub gpu_device: i32,
+    pub tts_model: String,
+    pub tts_voices: String,
+    pub tts_tokens: String,
+    pub tts_data_dir: String,
 }
 
 impl Config {
@@ -32,6 +36,16 @@ impl Config {
                 .unwrap_or_else(|_| "0".to_string())
                 .parse()
                 .unwrap(),
+
+            tts_model: env::var("TTS_MODEL")
+                .unwrap_or_else(|_| "models/tts/vits-coqui-en-vctk/model.onnx".to_string()),
+            tts_voices: env::var("TTS_VOICES").unwrap_or_else(|_| {
+                "models/tts/vits-coqui-en-vctk/espeak-ng-data/voices/!v/voices.bin".to_string()
+            }),
+            tts_tokens: env::var("TTS_TOKENS")
+                .unwrap_or_else(|_| "models/tts/vits-coqui-en-vctk/tokens.txt".to_string()),
+            tts_data_dir: env::var("TTS_DATA_DIR")
+                .unwrap_or_else(|_| "models/tts/vits-coqui-en-vctk/espeak-ng-data".to_string()),
         }
     }
 }

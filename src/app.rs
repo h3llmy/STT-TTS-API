@@ -7,8 +7,9 @@ use std::sync::Arc;
 
 fn depedencies_injection(config: &Config) -> Arc<AppState> {
     let transcriber = Arc::new(WhisperTranscriber::new(&config));
+    let tts = Arc::new(crate::domain::tts::service::TtsService::new(&config));
 
-    Arc::new(AppState { transcriber })
+    Arc::new(AppState { transcriber, tts })
 }
 
 pub async fn build_app(config: &Config) -> Router {
@@ -16,6 +17,7 @@ pub async fn build_app(config: &Config) -> Router {
 
     let app = Router::new()
         .merge(stt_route())
+        .merge(tts_route())
         .with_state(shared_state.clone());
 
     app
