@@ -31,7 +31,7 @@
       historyText = "";
       output.textContent = "Connecting...";
 
-      socket = new WebSocket("ws://localhost:3078/stt");
+      socket = new WebSocket("ws://localhost:3078/stt/transcribe");
       socket.binaryType = "arraybuffer";
 
       socket.onmessage = (event) => {

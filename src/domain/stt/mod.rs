@@ -1,3 +1,2 @@
-mod handler;
-pub mod route;
+pub mod controller;
 pub mod service;
