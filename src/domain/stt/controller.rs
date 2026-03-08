@@ -11,8 +11,10 @@ use axum::{
 use futures::StreamExt;
 use serde_json::json;
 
-use crate::app::AppState;
-use crate::domain::stt::service::{StreamProcessor, TranscriptionResult};
+use crate::{
+    domain::stt::service::{StreamProcessor, TranscriptionResult},
+    shared::app_state::AppState,
+};
 
 pub struct SttController;
 

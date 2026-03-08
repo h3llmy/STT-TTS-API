@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use crate::{app::AppState, domain::stt::controller::SttController};
+use crate::{domain::stt::controller::SttController, shared::app_state::AppState};
 use axum::{Router, routing::get};
 
 pub fn stt_route() -> Router<Arc<AppState>> {

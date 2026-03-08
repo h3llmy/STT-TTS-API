@@ -1,12 +1,9 @@
-use crate::core::config::Config;
-use crate::domain::stt::service::WhisperTranscriber;
-use crate::presentation::*;
+use crate::{
+    core::config::Config, domain::stt::service::WhisperTranscriber, presentation::*,
+    shared::app_state::AppState,
+};
 use axum::Router;
 use std::sync::Arc;
-
-pub struct AppState {
-    pub transcriber: Arc<WhisperTranscriber>,
-}
 
 pub async fn build_app(config: &Config) -> Router {
     dotenvy::dotenv().ok();
