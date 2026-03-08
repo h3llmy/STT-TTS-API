@@ -13,3 +13,4 @@ futures = "0.3.32"
 once_cell = "1.21.3"
 dotenvy = "0.15.7"
 sherpa-rs = "0.6.8"
+tokio-stream = { version = "0.1.17", features = ["sync"] }

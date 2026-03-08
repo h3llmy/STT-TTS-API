@@ -1,9 +1,11 @@
 use crate::shared::app_state::AppState;
 use axum::{
+    body::Body,
     extract::{Query, State},
     http::{StatusCode, header},
     response::IntoResponse,
 };
+use futures::StreamExt;
 use serde::Deserialize;
 use std::sync::Arc;
 
@@ -34,18 +36,25 @@ impl TtsController {
             return (StatusCode::BAD_REQUEST, "Text is required").into_response();
         }
 
-        let samples = state.tts.generate(&query.text, query.sid, query.speed);
+        let rx = state
+            .tts
+            .clone()
+            .generate_stream(&query.text, query.sid, query.speed);
 
-        // Convert f32 samples to i16 for broader compatibility and smaller size
-        let i16_samples: Vec<i16> = samples
-            .into_iter()
-            .map(|s| (s * 32767.0).clamp(-32768.0, 32767.0) as i16)
-            .collect();
+        // Convert the receiver into a stream of Bytes
+        let stream = tokio_stream::wrappers::ReceiverStream::new(rx).map(|samples| {
+            // Convert f32 samples to i16 for broader compatibility and smaller size
+            let i16_samples: Vec<i16> = samples
+                .into_iter()
+                .map(|s| (s * 32767.0).clamp(-32768.0, 32767.0) as i16)
+                .collect();
 
-        let mut bytes = Vec::with_capacity(i16_samples.len() * 2);
-        for sample in i16_samples {
-            bytes.extend_from_slice(&sample.to_le_bytes());
-        }
+            let mut bytes = Vec::with_capacity(i16_samples.len() * 2);
+            for sample in i16_samples {
+                bytes.extend_from_slice(&sample.to_le_bytes());
+            }
+            Ok::<_, std::convert::Infallible>(axum::body::Bytes::from(bytes))
+        });
 
         (
             [
@@ -57,8 +66,12 @@ impl TtsController {
                     header::HeaderName::from_static("x-sample-rate"),
                     header::HeaderValue::from_static("24000"),
                 ),
+                (
+                    header::TRANSFER_ENCODING,
+                    header::HeaderValue::from_static("chunked"),
+                ),
             ],
-            bytes,
+            Body::from_stream(stream),
         )
             .into_response()
     }
