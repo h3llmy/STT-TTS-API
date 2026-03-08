@@ -12,8 +12,6 @@ fn depedencies_injection(config: &Config) -> Arc<AppState> {
 }
 
 pub async fn build_app(config: &Config) -> Router {
-    dotenvy::dotenv().ok();
-
     let shared_state = depedencies_injection(config);
 
     let app = Router::new()

@@ -11,6 +11,8 @@ mod shared;
 
 #[tokio::main]
 async fn main() {
+    dotenvy::dotenv().ok();
+
     let config = Config::from_env();
 
     let app = app::build_app(&config).await;
