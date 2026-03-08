@@ -8,6 +8,7 @@ use axum::{
 use futures::StreamExt;
 use serde::Deserialize;
 use std::sync::Arc;
+use tokio_stream::wrappers::ReceiverStream;
 
 pub struct TtsController;
 
@@ -42,7 +43,7 @@ impl TtsController {
             .generate_stream(&query.text, query.sid, query.speed);
 
         // Convert the receiver into a stream of Bytes
-        let stream = tokio_stream::wrappers::ReceiverStream::new(rx).map(|samples| {
+        let stream = ReceiverStream::new(rx).map(|samples| {
             // Convert f32 samples to i16 for broader compatibility and smaller size
             let i16_samples: Vec<i16> = samples
                 .into_iter()

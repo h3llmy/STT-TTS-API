@@ -1,4 +1,6 @@
-use whisper_rs::{FullParams, SamplingStrategy, WhisperContext, WhisperContextParameters};
+use whisper_rs::{
+    FullParams, SamplingStrategy, WhisperContext, WhisperContextParameters, WhisperState,
+};
 
 use crate::core::config::Config;
 
@@ -11,14 +13,18 @@ pub struct StreamProcessor {
     audio_buffer: Vec<f32>,
     last_processed_len: usize,
     last_transcribed_text: String,
+    whisper_state: Option<WhisperState>,
+    detected_language: Option<String>,
 }
 
 impl StreamProcessor {
     pub fn new() -> Self {
         Self {
-            audio_buffer: Vec::new(),
+            audio_buffer: Vec::with_capacity(16_000 * 30), // Pre-allocate 30s
             last_processed_len: 0,
             last_transcribed_text: String::new(),
+            whisper_state: None,
+            detected_language: None,
         }
     }
 
@@ -36,33 +42,72 @@ impl StreamProcessor {
 
         self.audio_buffer.extend(samples);
 
+        // Lazy-initialize whisper state
+        if self.whisper_state.is_none() {
+            self.whisper_state = Some(
+                transcriber
+                    .context
+                    .create_state()
+                    .expect("Failed to create whisper state"),
+            );
+        }
+
         // Periodic transcription for "real-time" feel (every ~500ms of new audio)
+        // Optimization: Use a sliding window of the last 15-30 seconds for partial results.
+        // This is much faster than transcribing an unlimited buffer while maintaining context.
         if self.audio_buffer.len() - self.last_processed_len >= 8000 {
-            let recent_samples = if self.audio_buffer.len() > 4000 {
-                &self.audio_buffer[self.audio_buffer.len() - 4000..]
+            let window_size = 16_000 * 30; // 30 seconds
+            let start = if self.audio_buffer.len() > window_size {
+                self.audio_buffer.len() - window_size
             } else {
-                &self.audio_buffer[..]
+                0
             };
 
-            if !self.is_silence_internal(recent_samples) {
-                if let Some(text) = transcriber.transcribe(&self.audio_buffer) {
-                    if text != self.last_transcribed_text {
-                        results.push(TranscriptionResult::Partial(text.clone()));
-                        self.last_transcribed_text = text;
+            let audio_window = &self.audio_buffer[start..];
+
+            if !self.is_silence_internal(audio_window) {
+                if let Some(state) = self.whisper_state.as_mut() {
+                    if let Some(text) = transcriber.transcribe_with_state(
+                        state,
+                        audio_window,
+                        self.detected_language.as_deref(),
+                    ) {
+                        // After first transcription, if language was auto-detected, we can try to lock it
+                        // Note: whisper_rs doesn't easily expose the detected language from the state without more calls,
+                        // but we can assume auto-detection works better if we lock it later or just keep auto if fast enough.
+                        // For now, let's keep it simple.
+
+                        if text != self.last_transcribed_text {
+                            results.push(TranscriptionResult::Partial(text.clone()));
+                            self.last_transcribed_text = text;
+                        }
                     }
                 }
             }
             self.last_processed_len = self.audio_buffer.len();
         }
 
-        // Finalization: If the last 1 second is silent, conclude the sentence.
-        if self.audio_buffer.len() >= 16_000 {
-            let last_1s = &self.audio_buffer[self.audio_buffer.len() - 16_000..];
-            if self.is_silence_internal(last_1s) {
+        // Finalization: If the last 1.2 seconds are silent, conclude the sentence.
+        if self.audio_buffer.len() >= 16_000 + 3200 {
+            let silence_check_len = 16_000 + 3200; // 1.2s
+            let last_part = &self.audio_buffer[self.audio_buffer.len() - silence_check_len..];
+            if self.is_silence_internal(last_part) {
                 if !self.last_transcribed_text.is_empty() {
-                    results.push(TranscriptionResult::Final(
-                        self.last_transcribed_text.clone(),
-                    ));
+                    // One final transcription of the FULL buffer for maximum accuracy before clearing
+                    if let Some(state) = self.whisper_state.as_mut() {
+                        if let Some(text) = transcriber.transcribe_with_state(
+                            state,
+                            &self.audio_buffer,
+                            self.detected_language.as_deref(),
+                        ) {
+                            results.push(TranscriptionResult::Final(text));
+                        } else {
+                            // Fallback to last partial if final failed
+                            results.push(TranscriptionResult::Final(
+                                self.last_transcribed_text.clone(),
+                            ));
+                        }
+                    }
                 }
 
                 self.audio_buffer.clear();
@@ -85,7 +130,7 @@ impl StreamProcessor {
             return true;
         }
         let energy: f32 = audio.iter().map(|s| s.abs()).sum::<f32>() / audio.len() as f32;
-        energy < 0.012
+        energy < 0.015
     }
 }
 
@@ -122,25 +167,28 @@ impl WhisperTranscriber {
         energy < 0.015
     }
 
-    pub fn transcribe(&self, audio: &[f32]) -> Option<String> {
+    pub fn transcribe_with_state(
+        &self,
+        state: &mut WhisperState,
+        audio: &[f32],
+        language: Option<&str>,
+    ) -> Option<String> {
         if self.is_silence(audio) {
             return None;
         }
-
-        let mut state = self
-            .context
-            .create_state()
-            .expect("failed to create whisper state");
 
         let mut params = FullParams::new(SamplingStrategy::Greedy { best_of: 1 });
 
         params.set_n_threads(self.config.threads);
         params.set_translate(false);
-        params.set_language(Some("auto"));
+        params.set_language(Some(language.unwrap_or("auto")));
         params.set_print_special(false);
         params.set_print_progress(false);
         params.set_print_realtime(false);
         params.set_print_timestamps(false);
+
+        // Speed up transcription by decreasing the max number of segments if possible
+        // but default is usually fine.
 
         if state.full(params, audio).is_err() {
             return None;
@@ -160,5 +208,14 @@ impl WhisperTranscriber {
         let text = text.trim().to_string();
 
         if text.is_empty() { None } else { Some(text) }
+    }
+
+    #[allow(dead_code)]
+    pub fn transcribe(&self, audio: &[f32]) -> Option<String> {
+        let mut state = self
+            .context
+            .create_state()
+            .expect("failed to create whisper state");
+        self.transcribe_with_state(&mut state, audio, None)
     }
 }
