@@ -5,12 +5,16 @@ use crate::{
 use axum::Router;
 use std::sync::Arc;
 
+fn depedencies_injection(config: &Config) -> Arc<AppState> {
+    let transcriber = Arc::new(WhisperTranscriber::new(&config));
+
+    Arc::new(AppState { transcriber })
+}
+
 pub async fn build_app(config: &Config) -> Router {
     dotenvy::dotenv().ok();
 
-    let transcriber = Arc::new(WhisperTranscriber::new(&config));
-
-    let shared_state = Arc::new(AppState { transcriber });
+    let shared_state = depedencies_injection(config);
 
     let app = Router::new()
         .merge(stt_route())
