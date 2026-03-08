@@ -31,7 +31,7 @@ COPY . .
 RUN touch src/main.rs && cargo build --release
 
 # Runtime stage
-FROM debian:bookworm-slim
+FROM debian:trixie-slim AS runtime
 
 WORKDIR /app
 

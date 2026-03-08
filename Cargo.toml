@@ -11,3 +11,5 @@ serde_json = "1.0.149"
 futures = "0.3.31"
 once_cell = "1.21.3"
 dotenvy = "0.15.7"
+# kokoroxide = "0.1.5"
+# ort = { version = "1.16", features = ["download-binaries"] }
