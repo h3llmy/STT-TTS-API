@@ -64,27 +64,17 @@ impl TtsService {
 
         tokio::task::spawn_blocking(move || {
             let mut current = String::new();
-            let mut word_count = 0;
-            let mut is_first_chunk = true;
 
             for c in text.chars() {
                 current.push(c);
-                if c == ' ' {
-                    word_count += 1;
-                }
 
-                // Sensitivity settings
+                // Natural sentence boundaries preserve proper pitch and prosody
                 let hard_boundary = c == '.' || c == '!' || c == '?' || c == '\n';
-                let soft_boundary = c == ',' || c == ';' || c == ':' || c == '(' || c == ')';
+                let soft_boundary = c == ',' || c == ';' || c == ':';
 
-                // Latency optimization:
-                // 1. Send first chunk very aggressively (e.g. after first comma or 5 words)
-                // 2. Otherwise split at hard boundaries or long soft-bounded segments
-                let should_split = if is_first_chunk {
-                    hard_boundary || (soft_boundary && current.len() > 20) || word_count >= 6
-                } else {
-                    hard_boundary || (soft_boundary && current.len() > 40) || word_count >= 15
-                };
+                // Avoid arbitrary word-count splits which break the natural flow.
+                // Split primarily on sentences, or major clauses if the text is getting long.
+                let should_split = hard_boundary || (soft_boundary && current.len() > 80);
 
                 if should_split {
                     let segment = current.trim().to_string();
@@ -95,9 +85,7 @@ impl TtsService {
                                 if tx.blocking_send(audio.samples).is_err() {
                                     return;
                                 }
-                                is_first_chunk = false;
                                 current.clear();
-                                word_count = 0;
                             }
                             Err(e) => {
                                 eprintln!("Streaming TTS Error: {}", e);

@@ -22,7 +22,7 @@ pub struct TtsQuery {
 }
 
 fn default_sid() -> i32 {
-    0
+    1
 }
 fn default_speed() -> f32 {
     1.0
